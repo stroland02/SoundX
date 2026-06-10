@@ -1,10 +1,13 @@
 #pragma once
 // JUCE-free. nextSample() is RT-safe (no allocation, no locks).
 #include <algorithm>
+#include <cmath>
 #include "Wavetable.h"
 
 namespace soundx::engine {
 
+// Call setSampleRate() before setFrequency(); the phase increment is derived
+// from both and recomputed on each setter call.
 class WavetableOscillator {
 public:
     explicit WavetableOscillator(const Wavetable& wavetable) : table_(&wavetable) {}
@@ -20,11 +23,10 @@ public:
     void setPosition(float position01) { position_ = std::clamp(position01, 0.0f, 1.0f); }
     void reset() { phase_ = 0.0f; }
 
-    float nextSample() {
+    float nextSample() noexcept {
         const float out = table_->sample(phase_, position_);
         phase_ += increment_;
-        if (phase_ >= 1.0f)
-            phase_ -= 1.0f;
+        phase_ -= std::floor(phase_);
         return out;
     }
 

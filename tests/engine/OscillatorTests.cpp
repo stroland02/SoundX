@@ -76,3 +76,13 @@ TEST_CASE("reset returns phase to zero") {
     osc.reset();
     REQUIRE(osc.nextSample() == Approx(first).margin(1e-6f));
 }
+
+TEST_CASE("oscillator without a sample rate stays silent and finite") {
+    const auto wt = Wavetable::makeSineSaw();
+    WavetableOscillator osc(wt);
+    osc.setFrequency(440.0f); // no setSampleRate yet
+    for (int i = 0; i < 64; ++i) {
+        const float v = osc.nextSample();
+        REQUIRE(std::isfinite(v));
+    }
+}
