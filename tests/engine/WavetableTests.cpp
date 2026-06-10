@@ -54,5 +54,25 @@ TEST_CASE("factory bank has sine then saw, both bounded") {
         for (std::size_t i = 0; i < Wavetable::kTableSize; ++i) {
             const float v = wt.sample(float(i) / float(Wavetable::kTableSize), pos);
             REQUIRE(std::abs(v) <= 1.05f);
+            const float vMid = wt.sample((float(i) + 0.5f) / float(Wavetable::kTableSize), pos);
+            REQUIRE(std::abs(vMid) <= 1.05f);
         }
+}
+
+TEST_CASE("phase wraps outside the canonical range") {
+    Wavetable wt;
+    wt.addTable(rampTable());
+    REQUIRE(wt.sample(1.0f, 0.0f) == Approx(wt.sample(0.0f, 0.0f)).margin(1e-5f));
+    REQUIRE(wt.sample(1.5f, 0.0f) == Approx(wt.sample(0.5f, 0.0f)).margin(1e-4f));
+    REQUIRE(wt.sample(-0.5f, 0.0f) == Approx(wt.sample(0.5f, 0.0f)).margin(1e-4f));
+}
+
+TEST_CASE("position blend is linear at intermediate points") {
+    Wavetable wt;
+    Wavetable::Table zeros(Wavetable::kTableSize, 0.0f);
+    Wavetable::Table ones(Wavetable::kTableSize, 1.0f);
+    wt.addTable(zeros);
+    wt.addTable(ones);
+    REQUIRE(wt.sample(0.3f, 0.25f) == Approx(0.25f).margin(1e-5f));
+    REQUIRE(wt.sample(0.3f, 0.75f) == Approx(0.75f).margin(1e-5f));
 }

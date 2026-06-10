@@ -29,6 +29,8 @@ public:
         const auto low = std::min(std::size_t(scaled), tables_.size() - 1);
         const auto high = std::min(low + 1, tables_.size() - 1);
         const float tableFrac = scaled - float(low);
+        if (low == high)
+            return readTable(tables_[low], phase);
         return readTable(tables_[low], phase) * (1.0f - tableFrac)
              + readTable(tables_[high], phase) * tableFrac;
     }
@@ -59,10 +61,12 @@ public:
 
 private:
     static float readTable(const Table& t, float phase) {
+        assert(std::isfinite(phase));
         const float idx = (phase - std::floor(phase)) * float(kTableSize);
-        const auto i0 = std::size_t(idx) % kTableSize;
+        const auto truncated = std::size_t(idx);
+        const auto i0 = truncated % kTableSize;
         const auto i1 = (i0 + 1) % kTableSize;
-        const float frac = idx - std::floor(idx);
+        const float frac = idx - float(truncated);
         return t[i0] * (1.0f - frac) + t[i1] * frac;
     }
 
