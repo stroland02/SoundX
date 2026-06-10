@@ -24,3 +24,6 @@ Thumbs.db
 
 # Environment secrets
 .env
+
+# Brainstorming session artifacts
+.superpowers/
