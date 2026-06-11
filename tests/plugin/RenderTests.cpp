@@ -164,6 +164,38 @@ TEST_CASE("mod source with amount 0 changes nothing") {
     REQUIRE(held.peakRms > 0.01f); // unmodulated slot A still plays
 }
 
+TEST_CASE("every effect keeps the output finite and audible") {
+    juce::ScopedJuceInitialiser_GUI juceInit;
+    for (const auto* fxOn : {"dist_on", "comp_on", "chorus_on", "delay_on", "reverb_on"}) {
+        SoundXAudioProcessor proc;
+        proc.prepareToPlay(44100.0, 512);
+        auto* p = proc.apvts().getParameter(fxOn);
+        REQUIRE(p != nullptr);
+        p->setValueNotifyingHost(1.0f);
+
+        juce::MidiBuffer midi;
+        midi.addEvent(juce::MidiMessage::noteOn(1, 60, 0.8f), 0);
+        auto held = renderBlocks(proc, midi, 30, 512);
+        INFO(fxOn);
+        REQUIRE(held.allFinite);
+        REQUIRE(held.peakRms > 0.005f);
+    }
+}
+
+TEST_CASE("the full chain at once stays finite") {
+    juce::ScopedJuceInitialiser_GUI juceInit;
+    SoundXAudioProcessor proc;
+    proc.prepareToPlay(44100.0, 512);
+    for (const auto* fxOn : {"dist_on", "comp_on", "chorus_on", "delay_on", "reverb_on"})
+        proc.apvts().getParameter(fxOn)->setValueNotifyingHost(1.0f);
+
+    juce::MidiBuffer midi;
+    midi.addEvent(juce::MidiMessage::noteOn(1, 60, 0.8f), 0);
+    auto held = renderBlocks(proc, midi, 30, 512);
+    REQUIRE(held.allFinite);
+    REQUIRE(held.peakRms > 0.005f);
+}
+
 TEST_CASE("spectral-to-spectral mid-morph is audible and finite") {
     juce::ScopedJuceInitialiser_GUI juceInit;
     SoundXAudioProcessor proc;

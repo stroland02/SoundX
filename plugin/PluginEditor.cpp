@@ -92,6 +92,25 @@ void SoundXAudioProcessorEditor::buildModColumn(ModColumn& col, const juce::Stri
     styleSlider(col.amount, (paramPrefix + "_amount").toRawUTF8(), "AMT");
 }
 
+void SoundXAudioProcessorEditor::buildFxColumn(
+    FxColumn& col, const char* onParam, const juce::String& title,
+    std::initializer_list<std::pair<const char*, const char*>> params) {
+    col.onButton.setButtonText(title);
+    col.onButton.setColour(juce::ToggleButton::textColourId, juce::Colour(kAccent));
+    col.onButton.setColour(juce::ToggleButton::tickColourId, juce::Colour(kAccent));
+    col.onButton.setColour(juce::ToggleButton::tickDisabledColourId, juce::Colour(kDim));
+    col.onButton.setWantsKeyboardFocus(false);
+    addAndMakeVisible(col.onButton);
+    col.onAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+        processor_.apvts(), onParam, col.onButton);
+
+    for (const auto& [id, name] : params) {
+        auto knob = std::make_unique<LabeledSlider>();
+        styleSlider(*knob, id, name);
+        col.knobs.push_back(std::move(knob));
+    }
+}
+
 SoundXAudioProcessorEditor::SoundXAudioProcessorEditor(SoundXAudioProcessor& p)
     : AudioProcessorEditor(&p), processor_(p) {
     for (int i = 0; i < kNumSharedSliders; ++i)
@@ -135,11 +154,21 @@ SoundXAudioProcessorEditor::SoundXAudioProcessorEditor(SoundXAudioProcessor& p)
         buildModColumn(modColumns_[size_t(SoundXAudioProcessor::kNumLfos + m)],
                        "macro" + juce::String(m + 1), "MACRO " + juce::String(m + 1), false);
 
+    buildFxColumn(fxColumns_[0], "dist_on", "DIST",
+                  {{"dist_drive", "DRIVE"}, {"dist_mix", "MIX"}});
+    buildFxColumn(fxColumns_[1], "comp_on", "OTT", {{"comp_depth", "DEPTH"}});
+    buildFxColumn(fxColumns_[2], "chorus_on", "CHORUS",
+                  {{"chorus_rate", "RATE"}, {"chorus_depth", "DEPTH"}, {"chorus_mix", "MIX"}});
+    buildFxColumn(fxColumns_[3], "delay_on", "DELAY",
+                  {{"delay_time", "TIME"}, {"delay_feedback", "FB"}, {"delay_mix", "MIX"}});
+    buildFxColumn(fxColumns_[4], "reverb_on", "REVERB",
+                  {{"reverb_size", "SIZE"}, {"reverb_damp", "DAMP"}, {"reverb_mix", "MIX"}});
+
     setWantsKeyboardFocus(false);
     addMouseListener(this, true);
     setResizable(true, true);
-    setResizeLimits(880, 620, 1900, 1200);
-    setSize(1060, 720);
+    setResizeLimits(920, 740, 1900, 1300);
+    setSize(1080, 860);
 }
 
 void SoundXAudioProcessorEditor::mouseUp(const juce::MouseEvent& e) {
@@ -231,6 +260,22 @@ void SoundXAudioProcessorEditor::resized() {
     morph_.label.setBounds(morphRow.removeFromLeft(110));
     morph_.slider.setBounds(morphRow);
     area.removeFromTop(6);
+
+    auto fxRow = area.removeFromBottom(area.getHeight() / 4);
+    {
+        const int fxCell = fxRow.getWidth() / int(fxColumns_.size());
+        for (auto& fx : fxColumns_) {
+            auto c = fxRow.removeFromLeft(fxCell).reduced(4);
+            fx.onButton.setBounds(c.removeFromTop(20));
+            const int kn = int(fx.knobs.size());
+            const int kw = c.getWidth() / juce::jmax(1, kn);
+            for (auto& knob : fx.knobs) {
+                auto kc = c.removeFromLeft(kw).reduced(2);
+                knob->label.setBounds(kc.removeFromTop(13));
+                knob->slider.setBounds(kc.withHeight(juce::jmin(kc.getHeight(), 78)));
+            }
+        }
+    }
 
     auto sharedRow = area.removeFromTop(area.getHeight() / 3);
     const int sharedCell = sharedRow.getWidth() / kNumSharedSliders;

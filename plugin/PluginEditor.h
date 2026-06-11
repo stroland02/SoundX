@@ -45,6 +45,16 @@ private:
     void buildModColumn(ModColumn& col, const juce::String& paramPrefix,
                         const juce::String& title, bool isLfo);
 
+    // one effect group in the FX strip
+    struct FxColumn {
+        juce::ToggleButton onButton;
+        std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> onAttachment;
+        std::vector<std::unique_ptr<LabeledSlider>> knobs;
+    };
+
+    void buildFxColumn(FxColumn& col, const char* onParam, const juce::String& title,
+                       std::initializer_list<std::pair<const char*, const char*>> params);
+
     SoundXAudioProcessor& processor_;
     std::array<LabeledSlider, kNumSharedSliders> shared_;
     std::array<std::array<LabeledSlider, kNumSlotSliders>, SoundXAudioProcessor::kNumSlots> slots_;
@@ -52,6 +62,7 @@ private:
     std::array<juce::ComboBox, SoundXAudioProcessor::kNumSlots> modeBoxes_;
     std::array<std::unique_ptr<ComboAttachment>, SoundXAudioProcessor::kNumSlots> modeAttachments_;
     std::array<ModColumn, SoundXAudioProcessor::kNumLfos + SoundXAudioProcessor::kNumMacros> modColumns_;
+    std::array<FxColumn, 5> fxColumns_;
     int dragHoverSlot_ = -1; // -1 = none
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SoundXAudioProcessorEditor)
