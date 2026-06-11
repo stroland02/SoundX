@@ -48,6 +48,8 @@ public:
             clearCurrentNote();
             return;
         }
+        // Defensive: never trust the host to honor the prepared block size.
+        numSamples = std::min(numSamples, int(scratch_.size()));
         std::fill_n(scratch_.data(), size_t(numSamples), 0.0f);
         voice_.render(scratch_.data(), numSamples);
         for (int ch = 0; ch < output.getNumChannels(); ++ch)
