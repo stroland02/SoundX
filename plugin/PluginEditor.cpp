@@ -15,11 +15,11 @@ constexpr auto kBackground = 0xff02090c;
 constexpr auto kAccent = 0xff22d3ee;
 constexpr auto kDim = 0xff0e3a40;
 
-constexpr std::array<const char*, 9> kParamIds = {"gain", "attack", "decay", "sustain",
-                                                  "release", "position", "grainsize",
-                                                  "density", "spray"};
-constexpr std::array<const char*, 9> kParamNames = {"GAIN", "ATK", "DEC", "SUS",
-                                                    "REL", "POS", "GRAIN", "DENS", "SPRAY"};
+constexpr std::array<const char*, 10> kParamIds = {"gain", "attack", "decay", "sustain",
+                                                   "release", "position", "grainsize",
+                                                   "density", "spray", "stretch"};
+constexpr std::array<const char*, 10> kParamNames = {"GAIN", "ATK", "DEC", "SUS", "REL",
+                                                     "POS", "GRAIN", "DENS", "SPRAY", "STRCH"};
 
 bool isSupportedAudioFile(const juce::String& path) {
     return path.endsWithIgnoreCase(".wav") || path.endsWithIgnoreCase(".aif")
@@ -54,6 +54,7 @@ SoundXAudioProcessorEditor::SoundXAudioProcessorEditor(SoundXAudioProcessor& p)
 
     modeBox_.addItem("WAVETABLE", 1);
     modeBox_.addItem("GRANULAR", 2);
+    modeBox_.addItem("SPECTRAL", 3);
     modeBox_.setColour(juce::ComboBox::backgroundColourId, juce::Colour(kBackground));
     modeBox_.setColour(juce::ComboBox::textColourId, juce::Colour(kAccent));
     modeBox_.setColour(juce::ComboBox::outlineColourId, juce::Colour(kDim));
