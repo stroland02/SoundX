@@ -21,6 +21,9 @@ SoundXAudioProcessorEditor::SoundXAudioProcessorEditor(SoundXAudioProcessor& p)
         s.slider.setColour(juce::Slider::rotarySliderOutlineColourId, juce::Colour(kDim));
         s.slider.setColour(juce::Slider::textBoxTextColourId, juce::Colour(kAccent));
         s.slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colour(kDim));
+        // Let FL Studio's typing keyboard keep working while the editor is focused:
+        // sliders grab keyboard focus by default and would swallow note keys.
+        s.slider.setWantsKeyboardFocus(false);
         addAndMakeVisible(s.slider);
 
         s.label.setText(kParamNames[size_t(i)], juce::dontSendNotification);
@@ -31,6 +34,7 @@ SoundXAudioProcessorEditor::SoundXAudioProcessorEditor(SoundXAudioProcessor& p)
 
         s.attachment = std::make_unique<Attachment>(processor_.apvts(), kParamIds[size_t(i)], s.slider);
     }
+    setWantsKeyboardFocus(false);
     setResizable(true, true);
     setResizeLimits(540, 320, 1440, 850);
     setSize(720, 420);
