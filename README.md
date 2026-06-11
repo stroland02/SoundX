@@ -15,6 +15,10 @@ Hybrid synthesizer VST3 (Windows). Current features:
   (wavetable bank, grain cloud, spectral model); switch with the mode selector
 - **Modulation** — 3 LFOs (5 shapes, 0.01–20 Hz) and 4 macro knobs, each
   routable to any engine parameter including MORPH itself
+- **Harmonic Orbits visualizer** — the output's partials orbit the fundamental
+  in real time: orbit radius = frequency ratio, color = inharmonicity, core
+  glow = psychoacoustic consonance ("STABILITY"), interval naming on the HUD,
+  and the MORPH control rolls the 3D projection (the 4D twist)
 - **FX rack** — distortion, OTT-style multiband compressor, chorus, delay,
   reverb (Freeverb topology), each toggleable
 - HUD-styled resizable UI, full parameter automation and state recall
