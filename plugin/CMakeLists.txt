@@ -13,7 +13,8 @@ juce_add_plugin(SoundX
 
 target_sources(SoundX PRIVATE
     PluginProcessor.cpp
-    PluginEditor.cpp)
+    PluginEditor.cpp
+    OrbitView.cpp)
 
 target_include_directories(SoundX PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 

@@ -258,6 +258,15 @@ void SoundXAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::
                               reverbParams_.p3->load());
             reverb_.process(l, r, n);
         }
+
+        // visualizer tap (mono, lock-free; drops samples when the UI lags)
+        int start1, size1, start2, size2;
+        vizFifo_.prepareToWrite(n, start1, size1, start2, size2);
+        for (int i = 0; i < size1; ++i)
+            vizBuffer_[size_t(start1 + i)] = l[i];
+        for (int i = 0; i < size2; ++i)
+            vizBuffer_[size_t(start2 + i)] = l[size1 + i];
+        vizFifo_.finishedWrite(size1 + size2);
     }
 }
 
@@ -346,6 +355,17 @@ void SoundXAudioProcessor::loadSampleFile(int slot, const juce::File& file) {
             applySample(slot, data, name);
         });
     });
+}
+
+int SoundXAudioProcessor::popVisualizerSamples(float* dest, int maxSamples) {
+    int start1, size1, start2, size2;
+    vizFifo_.prepareToRead(maxSamples, start1, size1, start2, size2);
+    for (int i = 0; i < size1; ++i)
+        dest[i] = vizBuffer_[size_t(start1 + i)];
+    for (int i = 0; i < size2; ++i)
+        dest[size1 + i] = vizBuffer_[size_t(start2 + i)];
+    vizFifo_.finishedRead(size1 + size2);
+    return size1 + size2;
 }
 
 // JUCE plugin entry point

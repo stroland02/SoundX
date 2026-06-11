@@ -112,7 +112,8 @@ void SoundXAudioProcessorEditor::buildFxColumn(
 }
 
 SoundXAudioProcessorEditor::SoundXAudioProcessorEditor(SoundXAudioProcessor& p)
-    : AudioProcessorEditor(&p), processor_(p) {
+    : AudioProcessorEditor(&p), processor_(p), orbitView_(p) {
+    addAndMakeVisible(orbitView_);
     for (int i = 0; i < kNumSharedSliders; ++i)
         styleSlider(shared_[size_t(i)], kSharedIds[size_t(i)], kSharedNames[size_t(i)]);
 
@@ -167,8 +168,8 @@ SoundXAudioProcessorEditor::SoundXAudioProcessorEditor(SoundXAudioProcessor& p)
     setWantsKeyboardFocus(false);
     addMouseListener(this, true);
     setResizable(true, true);
-    setResizeLimits(920, 740, 1900, 1300);
-    setSize(1080, 860);
+    setResizeLimits(960, 900, 1900, 1500);
+    setSize(1100, 1000);
 }
 
 void SoundXAudioProcessorEditor::mouseUp(const juce::MouseEvent& e) {
@@ -259,6 +260,9 @@ void SoundXAudioProcessorEditor::resized() {
     auto morphRow = area.removeFromTop(40);
     morph_.label.setBounds(morphRow.removeFromLeft(110));
     morph_.slider.setBounds(morphRow);
+    area.removeFromTop(6);
+
+    orbitView_.setBounds(area.removeFromTop(210));
     area.removeFromTop(6);
 
     auto fxRow = area.removeFromBottom(area.getHeight() / 4);
