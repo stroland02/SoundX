@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cmath>
 #include <numbers>
+#include "BinaryData.h"
 #include "PluginProcessor.h"
 #include "engine/SampleImporter.h"
 
@@ -194,6 +195,33 @@ TEST_CASE("the full chain at once stays finite") {
     auto held = renderBlocks(proc, midi, 30, 512);
     REQUIRE(held.allFinite);
     REQUIRE(held.peakRms > 0.005f);
+}
+
+TEST_CASE("every factory preset loads and renders finite output") {
+    juce::ScopedJuceInitialiser_GUI juceInit;
+    int presetsTested = 0;
+    for (int res = 0; res < BinaryData::namedResourceListSize; ++res) {
+        if (!juce::String(BinaryData::originalFilenames[res]).endsWith(".soundxpreset"))
+            continue;
+        ++presetsTested;
+
+        SoundXAudioProcessor proc;
+        proc.prepareToPlay(44100.0, 512);
+
+        int dataSize = 0;
+        const char* data = BinaryData::getNamedResource(BinaryData::namedResourceList[res], dataSize);
+        REQUIRE(data != nullptr);
+        auto xml = juce::parseXML(juce::String::fromUTF8(data, dataSize));
+        REQUIRE(xml != nullptr);
+        proc.apvts().replaceState(juce::ValueTree::fromXml(*xml));
+
+        juce::MidiBuffer midi;
+        midi.addEvent(juce::MidiMessage::noteOn(1, 60, 0.8f), 0);
+        auto held = renderBlocks(proc, midi, 20, 512);
+        INFO(BinaryData::originalFilenames[res]);
+        REQUIRE(held.allFinite);
+    }
+    REQUIRE(presetsTested >= 12);
 }
 
 TEST_CASE("spectral-to-spectral mid-morph is audible and finite") {

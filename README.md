@@ -21,6 +21,9 @@ Hybrid synthesizer VST3 (Windows). Current features:
   and the MORPH control rolls the 3D projection (the 4D twist)
 - **FX rack** — distortion, OTT-style multiband compressor, chorus, delay,
   reverb (Freeverb topology), each toggleable
+- **14 factory presets** (generated and validated by the Python factory
+  pipeline, embedded in the plugin) + one-click user preset saving to
+  `Documents/SoundX/Presets`
 - HUD-styled resizable UI, full parameter automation and state recall
 
 ## Requirements
