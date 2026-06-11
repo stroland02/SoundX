@@ -29,7 +29,20 @@ Claude Code agent tooling (rules, skills, commands, hooks) from
 [ECC](https://github.com/affaan-m/ECC) is installed per-project under
 `.claude/` (developer profile + machine-learning module).
 
+## Building the plugin
+
+```powershell
+cmake -B build -G "Visual Studio 17 2022" -A x64
+cmake --build build --config Release
+ctest --test-dir build -C Release --output-on-failure
+```
+
+Artifacts land in `build/plugin/SoundX_artefacts/Release/` (`VST3/` and `Standalone/`).
+Install for FL Studio by copying `SoundX.vst3` to `C:\Program Files\Common Files\VST3\`
+(elevated shell) or adding the artefacts folder as an FL plugin search path.
+
 ## Development
 
-- Tests: `uv run pytest`
-- Lint: `uv run ruff check .`
+- C++ tests: `ctest --test-dir build -C Release --output-on-failure`
+- Python factory tests: `uv run pytest`
+- Lint (Python): `uv run ruff check .`
