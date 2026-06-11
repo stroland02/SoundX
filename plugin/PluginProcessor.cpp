@@ -79,6 +79,37 @@ juce::AudioProcessorValueTreeState::ParameterLayout SoundXAudioProcessor::create
         layout.add(std::make_unique<P>(juce::ParameterID{p + "_amount", 1}, p.toUpperCase() + " Amount",
                                        juce::NormalisableRange<float>(-1.0f, 1.0f), 0.0f));
     }
+
+    using B = juce::AudioParameterBool;
+    layout.add(std::make_unique<B>(juce::ParameterID{"dist_on", 1}, "Distortion On", false));
+    layout.add(std::make_unique<P>(juce::ParameterID{"dist_drive", 1}, "Distortion Drive",
+                                   juce::NormalisableRange<float>(1.0f, 20.0f, 0.0f, 0.5f), 4.0f));
+    layout.add(std::make_unique<P>(juce::ParameterID{"dist_mix", 1}, "Distortion Mix",
+                                   juce::NormalisableRange<float>(0.0f, 1.0f), 1.0f));
+    layout.add(std::make_unique<B>(juce::ParameterID{"comp_on", 1}, "OTT On", false));
+    layout.add(std::make_unique<P>(juce::ParameterID{"comp_depth", 1}, "OTT Depth",
+                                   juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f));
+    layout.add(std::make_unique<B>(juce::ParameterID{"chorus_on", 1}, "Chorus On", false));
+    layout.add(std::make_unique<P>(juce::ParameterID{"chorus_rate", 1}, "Chorus Rate",
+                                   juce::NormalisableRange<float>(0.1f, 5.0f, 0.0f, 0.5f), 1.0f));
+    layout.add(std::make_unique<P>(juce::ParameterID{"chorus_depth", 1}, "Chorus Depth",
+                                   juce::NormalisableRange<float>(1.0f, 15.0f), 8.0f));
+    layout.add(std::make_unique<P>(juce::ParameterID{"chorus_mix", 1}, "Chorus Mix",
+                                   juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f));
+    layout.add(std::make_unique<B>(juce::ParameterID{"delay_on", 1}, "Delay On", false));
+    layout.add(std::make_unique<P>(juce::ParameterID{"delay_time", 1}, "Delay Time",
+                                   juce::NormalisableRange<float>(10.0f, 2000.0f, 0.0f, 0.4f), 350.0f));
+    layout.add(std::make_unique<P>(juce::ParameterID{"delay_feedback", 1}, "Delay Feedback",
+                                   juce::NormalisableRange<float>(0.0f, 0.95f), 0.35f));
+    layout.add(std::make_unique<P>(juce::ParameterID{"delay_mix", 1}, "Delay Mix",
+                                   juce::NormalisableRange<float>(0.0f, 1.0f), 0.3f));
+    layout.add(std::make_unique<B>(juce::ParameterID{"reverb_on", 1}, "Reverb On", false));
+    layout.add(std::make_unique<P>(juce::ParameterID{"reverb_size", 1}, "Reverb Size",
+                                   juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f));
+    layout.add(std::make_unique<P>(juce::ParameterID{"reverb_damp", 1}, "Reverb Damp",
+                                   juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f));
+    layout.add(std::make_unique<P>(juce::ParameterID{"reverb_mix", 1}, "Reverb Mix",
+                                   juce::NormalisableRange<float>(0.0f, 1.0f), 0.3f));
     return layout;
 }
 
@@ -117,6 +148,17 @@ SoundXAudioProcessor::SoundXAudioProcessor()
         mp.amount = apvts_.getRawParameterValue(p + "_amount");
     }
 
+    distParams_ = {apvts_.getRawParameterValue("dist_on"), apvts_.getRawParameterValue("dist_drive"),
+                   apvts_.getRawParameterValue("dist_mix"), nullptr};
+    compParams_ = {apvts_.getRawParameterValue("comp_on"), apvts_.getRawParameterValue("comp_depth"),
+                   nullptr, nullptr};
+    chorusParams_ = {apvts_.getRawParameterValue("chorus_on"), apvts_.getRawParameterValue("chorus_rate"),
+                     apvts_.getRawParameterValue("chorus_depth"), apvts_.getRawParameterValue("chorus_mix")};
+    delayParams_ = {apvts_.getRawParameterValue("delay_on"), apvts_.getRawParameterValue("delay_time"),
+                    apvts_.getRawParameterValue("delay_feedback"), apvts_.getRawParameterValue("delay_mix")};
+    reverbParams_ = {apvts_.getRawParameterValue("reverb_on"), apvts_.getRawParameterValue("reverb_size"),
+                     apvts_.getRawParameterValue("reverb_damp"), apvts_.getRawParameterValue("reverb_mix")};
+
     synth_.addSound(new SynthSound());
     for (int i = 0; i < kNumVoices; ++i)
         synth_.addVoice(new SynthVoice(wavetable_));
@@ -127,6 +169,11 @@ void SoundXAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     synth_.setCurrentPlaybackSampleRate(sampleRate);
     for (auto& lfo : lfos_)
         lfo.setSampleRate(sampleRate);
+    distortion_.prepare(sampleRate, samplesPerBlock);
+    comp_.prepare(sampleRate, samplesPerBlock);
+    chorus_.prepare(sampleRate, samplesPerBlock);
+    delay_.prepare(sampleRate, samplesPerBlock);
+    reverb_.prepare(sampleRate, samplesPerBlock);
     for (int i = 0; i < synth_.getNumVoices(); ++i)
         if (auto* v = dynamic_cast<SynthVoice*>(synth_.getVoice(i)))
             v->prepare(sampleRate, samplesPerBlock);
@@ -182,6 +229,36 @@ void SoundXAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::
 
     synth_.renderNextBlock(buffer, midi, 0, buffer.getNumSamples());
     buffer.applyGain(gain);
+
+    // master FX chain (fixed order): dist -> OTT -> chorus -> delay -> reverb
+    if (buffer.getNumChannels() >= 1) {
+        float* l = buffer.getWritePointer(0);
+        float* r = buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : l;
+        const int n = buffer.getNumSamples();
+        if (distParams_.on->load() >= 0.5f) {
+            distortion_.setParams(distParams_.p1->load(), distParams_.p2->load());
+            distortion_.process(l, r, n);
+        }
+        if (compParams_.on->load() >= 0.5f) {
+            comp_.setParams(compParams_.p1->load());
+            comp_.process(l, r, n);
+        }
+        if (chorusParams_.on->load() >= 0.5f) {
+            chorus_.setParams(chorusParams_.p1->load(), chorusParams_.p2->load(),
+                              chorusParams_.p3->load());
+            chorus_.process(l, r, n);
+        }
+        if (delayParams_.on->load() >= 0.5f) {
+            delay_.setParams(delayParams_.p1->load(), delayParams_.p2->load(),
+                             delayParams_.p3->load());
+            delay_.process(l, r, n);
+        }
+        if (reverbParams_.on->load() >= 0.5f) {
+            reverb_.setParams(reverbParams_.p1->load(), reverbParams_.p2->load(),
+                              reverbParams_.p3->load());
+            reverb_.process(l, r, n);
+        }
+    }
 }
 
 bool SoundXAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const {
