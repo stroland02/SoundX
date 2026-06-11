@@ -58,6 +58,10 @@ public:
 
     juce::String currentSampleName(int slot) const { return slots_[size_t(slot)].name; }
 
+    // Visualizer tap: UI thread pulls mono post-FX output samples. Lock-free.
+    int popVisualizerSamples(float* dest, int maxSamples);
+    float currentMorph() const { return morph_ != nullptr ? morph_->load() : 0.0f; }
+
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
@@ -116,6 +120,9 @@ private:
         std::atomic<float>* p3 = nullptr;
     };
     FxParams distParams_, compParams_, chorusParams_, delayParams_, reverbParams_;
+
+    juce::AbstractFifo vizFifo_{1 << 14};
+    std::vector<float> vizBuffer_ = std::vector<float>(size_t(1 << 14), 0.0f);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SoundXAudioProcessor)
 };

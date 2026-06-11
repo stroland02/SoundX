@@ -1,5 +1,6 @@
 #pragma once
 #include <array>
+#include "OrbitView.h"
 #include "PluginProcessor.h"
 
 class SoundXAudioProcessorEditor : public juce::AudioProcessorEditor,
@@ -63,6 +64,7 @@ private:
     std::array<std::unique_ptr<ComboAttachment>, SoundXAudioProcessor::kNumSlots> modeAttachments_;
     std::array<ModColumn, SoundXAudioProcessor::kNumLfos + SoundXAudioProcessor::kNumMacros> modColumns_;
     std::array<FxColumn, 5> fxColumns_;
+    OrbitView orbitView_;
     int dragHoverSlot_ = -1; // -1 = none
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SoundXAudioProcessorEditor)
