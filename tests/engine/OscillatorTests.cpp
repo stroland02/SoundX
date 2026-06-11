@@ -86,3 +86,26 @@ TEST_CASE("oscillator without a sample rate stays silent and finite") {
         REQUIRE(std::isfinite(v));
     }
 }
+
+TEST_CASE("oscillator blends two banks by morph amount") {
+    Wavetable bankA, bankB;
+    bankA.addTable(Wavetable::Table(Wavetable::kTableSize, 0.2f));
+    bankB.addTable(Wavetable::Table(Wavetable::kTableSize, 0.8f));
+
+    WavetableOscillator osc(bankA);
+    osc.setSampleRate(44100.0);
+    osc.setFrequency(100.0f);
+    osc.setTables(&bankA, &bankB);
+
+    osc.setMorph(0.0f);
+    REQUIRE(osc.nextSample() == Approx(0.2f).margin(1e-5f));
+    osc.setMorph(1.0f);
+    REQUIRE(osc.nextSample() == Approx(0.8f).margin(1e-5f));
+    osc.setMorph(0.5f);
+    REQUIRE(osc.nextSample() == Approx(0.5f).margin(1e-5f));
+
+    // null B falls back to pure A regardless of morph
+    osc.setTables(&bankA, nullptr);
+    osc.setMorph(1.0f);
+    REQUIRE(osc.nextSample() == Approx(0.2f).margin(1e-5f));
+}

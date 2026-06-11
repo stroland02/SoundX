@@ -22,8 +22,9 @@ public:
         osc_.setPosition(position01);
     }
 
-    // Retarget to a different (already-built) bank. Safe between blocks only.
-    void setWavetable(const Wavetable* wavetable) { osc_.setTable(wavetable); }
+    // Retarget to different (already-built) banks. Safe between blocks only.
+    void setWavetables(const Wavetable* a, const Wavetable* b) { osc_.setTables(a, b); }
+    void setMorph(float morph01) { osc_.setMorph(morph01); }
 
     void noteOn(int midiNote, float velocity01) override {
         velocity_ = velocity01;

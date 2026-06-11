@@ -43,7 +43,7 @@ public:
     void setSources(const soundx::engine::Wavetable* wavetable,
                     const soundx::engine::SampleData* sample,
                     const soundx::engine::SpectralModel* model) {
-        wtVoice_.setWavetable(wavetable);
+        wtVoice_.setWavetables(wavetable, nullptr);
         granVoice_.setSample(sample);
         specVoice_.setModel(model);
     }

@@ -24,6 +24,13 @@ public:
 
     void setModel(const SpectralModel* model) { model_ = model; }
 
+    // Second model for true spectral morphing; null disables morphing.
+    void setModelB(const SpectralModel* model) { modelB_ = model; }
+
+    // Blend between model A (0) and model B (1): partial freq/amp pairs are
+    // interpolated, so frequencies glide instead of crossfading.
+    void setMorph(float morph01) { morph_ = std::clamp(morph01, 0.0f, 1.0f); }
+
     void setEnvParams(float a, float d, float s, float r) { env_.setParams(a, d, s, r); }
 
     // stretch: playback speed multiplier for the frame timeline; 0 freezes.
@@ -55,6 +62,7 @@ public:
         const double lastFrame = double(frames.size() - 1);
         constexpr float twoPi = 2.0f * float(std::numbers::pi);
         const float nyquist = float(sampleRate_) * 0.5f;
+        const bool morphing = modelB_ != nullptr && !modelB_->frames.empty() && morph_ > 0.0f;
 
         for (int i = 0; i < numSamples; ++i) {
             const float envLevel = env_.nextLevel();
@@ -67,13 +75,36 @@ public:
             const auto& a = frames[f0].partials;
             const auto& b = frames[f1].partials;
 
+            // model B frames addressed on the same timeline, clamped to its length
+            const SpectralPartial* m0 = nullptr;
+            const SpectralPartial* m1 = nullptr;
+            float mFrac = 0.0f;
+            if (morphing) {
+                const auto& bFrames = modelB_->frames;
+                const auto g0 = std::min(std::size_t(framePos_), bFrames.size() - 1);
+                const auto g1 = std::min(g0 + 1, bFrames.size() - 1);
+                m0 = bFrames[g0].partials.data();
+                m1 = bFrames[g1].partials.data();
+                mFrac = frac;
+            }
+
             float mix = 0.0f;
             for (std::size_t p = 0; p < SpectralFrame::kMaxPartials; ++p) {
-                const float amp = a[p].amp * (1.0f - frac) + b[p].amp * frac;
+                float amp = a[p].amp * (1.0f - frac) + b[p].amp * frac;
+                float freq = a[p].freqHz * (1.0f - frac) + b[p].freqHz * frac;
+                if (morphing) {
+                    const float ampB = m0[p].amp * (1.0f - mFrac) + m1[p].amp * mFrac;
+                    const float freqB = m0[p].freqHz * (1.0f - mFrac) + m1[p].freqHz * mFrac;
+                    // amp-guarded frequency: an absent partial adopts the other
+                    // side's frequency instead of gliding from/to 0 Hz
+                    const float fA = amp < 1e-6f ? freqB : freq;
+                    const float fB = ampB < 1e-6f ? freq : freqB;
+                    amp += (ampB - amp) * morph_;
+                    freq = fA + (fB - fA) * morph_;
+                }
                 if (amp < 1e-6f)
                     continue;
-                const float freq = (a[p].freqHz * (1.0f - frac) + b[p].freqHz * frac)
-                                 * float(pitchRatio_);
+                freq *= float(pitchRatio_);
                 if (freq <= 0.0f || freq >= nyquist)
                     continue;
                 float& phase = phases_[p];
@@ -91,6 +122,8 @@ private:
     std::array<float, SpectralFrame::kMaxPartials> phases_{};
     Adsr env_;
     const SpectralModel* model_ = nullptr;
+    const SpectralModel* modelB_ = nullptr;
+    float morph_ = 0.0f;
     double sampleRate_ = 0.0;
     double pitchRatio_ = 1.0;
     double framePos_ = 0.0;

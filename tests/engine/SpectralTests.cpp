@@ -178,6 +178,32 @@ TEST_CASE("spectral voice releases to silence") {
     REQUIRE(rmsOf(after) == 0.0f);
 }
 
+TEST_CASE("spectral model morph glides partial frequencies") {
+    const auto mA = constantModel(440.0f);
+    const auto mB = constantModel(660.0f);
+    auto crossingsAt = [&](float morph) {
+        SpectralVoice voice;
+        voice.setSampleRate(44100.0);
+        voice.setModel(&mA);
+        voice.setModelB(&mB);
+        voice.setMorph(morph);
+        voice.setEnvParams(0.001f, 0.05f, 1.0f, 0.05f);
+        voice.setSpectralParams(1.0f);
+        voice.noteOn(60, 1.0f);
+        std::vector<float> out(44100, 0.0f);
+        voice.render(out.data(), int(out.size()));
+        for (float v : out)
+            REQUIRE(std::isfinite(v));
+        return upwardCrossings(out);
+    };
+    const int at0 = crossingsAt(0.0f);
+    const int atHalf = crossingsAt(0.5f);
+    const int at1 = crossingsAt(1.0f);
+    REQUIRE(at0 >= 435);  REQUIRE(at0 <= 445);   // pure A: 440
+    REQUIRE(atHalf >= 543); REQUIRE(atHalf <= 557); // glide midpoint: 550, NOT both tones
+    REQUIRE(at1 >= 653);  REQUIRE(at1 <= 667);   // pure B: 660
+}
+
 TEST_CASE("stretch 0 freezes the frame but keeps sounding") {
     const auto m = constantModel();
     SpectralVoice voice;
