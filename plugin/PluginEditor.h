@@ -16,7 +16,9 @@ public:
     void fileDragExit(const juce::StringArray&) override;
 
 private:
-    static constexpr int kNumSliders = 10;
+    static constexpr int kNumSharedSliders = 5; // gain + ADSR
+    static constexpr int kNumSlotSliders = 5;   // position, grainsize, density, spray, stretch
+
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
     using ComboAttachment = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
 
@@ -26,11 +28,16 @@ private:
         std::unique_ptr<SliderAttachment> attachment;
     };
 
+    void styleSlider(LabeledSlider& s, const char* paramId, const char* name);
+    juce::Rectangle<int> dropZone(int slot) const;
+
     SoundXAudioProcessor& processor_;
-    std::array<LabeledSlider, kNumSliders> sliders_;
-    juce::ComboBox modeBox_;
-    std::unique_ptr<ComboAttachment> modeAttachment_;
-    bool dragHover_ = false;
+    std::array<LabeledSlider, kNumSharedSliders> shared_;
+    std::array<std::array<LabeledSlider, kNumSlotSliders>, SoundXAudioProcessor::kNumSlots> slots_;
+    LabeledSlider morph_;
+    std::array<juce::ComboBox, SoundXAudioProcessor::kNumSlots> modeBoxes_;
+    std::array<std::unique_ptr<ComboAttachment>, SoundXAudioProcessor::kNumSlots> modeAttachments_;
+    int dragHoverSlot_ = -1; // -1 = none
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SoundXAudioProcessorEditor)
 };

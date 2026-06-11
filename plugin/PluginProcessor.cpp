@@ -21,21 +21,26 @@ juce::AudioProcessorValueTreeState::ParameterLayout SoundXAudioProcessor::create
     layout.add(std::make_unique<P>(juce::ParameterID{"sustain", 1}, "Sustain",
                                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.8f));
     layout.add(std::make_unique<P>(juce::ParameterID{"release", 1}, "Release", secondsRange(), 0.2f));
-    layout.add(std::make_unique<P>(juce::ParameterID{"position", 1}, "Position",
+    layout.add(std::make_unique<P>(juce::ParameterID{"morph", 1}, "Morph",
                                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f));
-    layout.add(std::make_unique<juce::AudioParameterChoice>(
-        juce::ParameterID{"mode", 1}, "Engine Mode",
-        juce::StringArray{"Wavetable", "Granular", "Spectral"}, 0));
-    layout.add(std::make_unique<P>(juce::ParameterID{"grainsize", 1}, "Grain Size",
-                                   juce::NormalisableRange<float>(5.0f, 500.0f, 0.0f, 0.4f), 100.0f));
-    layout.add(std::make_unique<P>(juce::ParameterID{"density", 1}, "Density",
-                                   juce::NormalisableRange<float>(0.5f, 100.0f, 0.0f, 0.4f), 30.0f));
-    layout.add(std::make_unique<P>(juce::ParameterID{"spray", 1}, "Spray",
-                                   juce::NormalisableRange<float>(0.0f, 1.0f), 0.2f));
-    {
+
+    for (const auto* prefix : {"a", "b"}) {
+        const juce::String p(prefix);
+        const juce::String label = p.toUpperCase() + " ";
+        layout.add(std::make_unique<juce::AudioParameterChoice>(
+            juce::ParameterID{p + "_mode", 1}, label + "Engine Mode",
+            juce::StringArray{"Wavetable", "Granular", "Spectral"}, 0));
+        layout.add(std::make_unique<P>(juce::ParameterID{p + "_position", 1}, label + "Position",
+                                       juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f));
+        layout.add(std::make_unique<P>(juce::ParameterID{p + "_grainsize", 1}, label + "Grain Size",
+                                       juce::NormalisableRange<float>(5.0f, 500.0f, 0.0f, 0.4f), 100.0f));
+        layout.add(std::make_unique<P>(juce::ParameterID{p + "_density", 1}, label + "Density",
+                                       juce::NormalisableRange<float>(0.5f, 100.0f, 0.0f, 0.4f), 30.0f));
+        layout.add(std::make_unique<P>(juce::ParameterID{p + "_spray", 1}, label + "Spray",
+                                       juce::NormalisableRange<float>(0.0f, 1.0f), 0.2f));
         juce::NormalisableRange<float> stretchRange(0.0f, 4.0f);
         stretchRange.setSkewForCentre(1.0f);
-        layout.add(std::make_unique<P>(juce::ParameterID{"stretch", 1}, "Stretch",
+        layout.add(std::make_unique<P>(juce::ParameterID{p + "_stretch", 1}, label + "Stretch",
                                        stretchRange, 1.0f));
     }
     return layout;
@@ -49,12 +54,17 @@ SoundXAudioProcessor::SoundXAudioProcessor()
     decay_ = apvts_.getRawParameterValue("decay");
     sustain_ = apvts_.getRawParameterValue("sustain");
     release_ = apvts_.getRawParameterValue("release");
-    position_ = apvts_.getRawParameterValue("position");
-    mode_ = apvts_.getRawParameterValue("mode");
-    grainsize_ = apvts_.getRawParameterValue("grainsize");
-    density_ = apvts_.getRawParameterValue("density");
-    spray_ = apvts_.getRawParameterValue("spray");
-    stretch_ = apvts_.getRawParameterValue("stretch");
+    morph_ = apvts_.getRawParameterValue("morph");
+    for (int slot = 0; slot < kNumSlots; ++slot) {
+        const juce::String p = slot == 0 ? "a" : "b";
+        auto& sp = slotParams_[size_t(slot)];
+        sp.mode = apvts_.getRawParameterValue(p + "_mode");
+        sp.position = apvts_.getRawParameterValue(p + "_position");
+        sp.grainsize = apvts_.getRawParameterValue(p + "_grainsize");
+        sp.density = apvts_.getRawParameterValue(p + "_density");
+        sp.spray = apvts_.getRawParameterValue(p + "_spray");
+        sp.stretch = apvts_.getRawParameterValue(p + "_stretch");
+    }
 
     synth_.addSound(new SynthSound());
     for (int i = 0; i < kNumVoices; ++i)
@@ -75,14 +85,17 @@ void SoundXAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::
     buffer.clear();
 
     const float a = attack_->load(), d = decay_->load(), s = sustain_->load(),
-                r = release_->load(), pos = position_->load();
-    const float gsize = grainsize_->load(), dens = density_->load(), spr = spray_->load();
-    const float stretch = stretch_->load();
-    const auto mode = SynthVoice::Mode(int(mode_->load() + 0.5f));
+                r = release_->load(), morph = morph_->load();
     for (int i = 0; i < synth_.getNumVoices(); ++i)
         if (auto* v = dynamic_cast<SynthVoice*>(synth_.getVoice(i))) {
-            v->setMode(mode);
-            v->setParams(a, d, s, r, pos, gsize, dens, spr, stretch);
+            v->setMorph(morph);
+            for (int slot = 0; slot < kNumSlots; ++slot) {
+                const auto& sp = slotParams_[size_t(slot)];
+                v->setSlotParams(slot, SynthVoice::Mode(int(sp.mode->load() + 0.5f)),
+                                 sp.position->load(), sp.grainsize->load(),
+                                 sp.density->load(), sp.spray->load(), sp.stretch->load());
+            }
+            v->setSharedParams(a, d, s, r);
         }
 
     synth_.renderNextBlock(buffer, midi, 0, buffer.getNumSamples());
@@ -110,13 +123,17 @@ void SoundXAudioProcessor::setStateInformation(const void* data, int sizeInBytes
 }
 
 void SoundXAudioProcessor::rebindVoiceSources() {
-    const auto* wt = importedWavetable_ != nullptr ? importedWavetable_.get() : &wavetable_;
     for (int i = 0; i < synth_.getNumVoices(); ++i)
         if (auto* v = dynamic_cast<SynthVoice*>(synth_.getVoice(i)))
-            v->setSources(wt, sample_.get(), spectralModel_.get());
+            for (int slot = 0; slot < kNumSlots; ++slot) {
+                const auto& assets = slots_[size_t(slot)];
+                const auto* wt = assets.wavetable != nullptr ? assets.wavetable.get() : &wavetable_;
+                v->setSlotSources(slot, wt, assets.sample.get(), assets.model.get());
+            }
 }
 
-void SoundXAudioProcessor::applySample(std::shared_ptr<const soundx::engine::SampleData> sample,
+void SoundXAudioProcessor::applySample(int slot,
+                                       std::shared_ptr<const soundx::engine::SampleData> sample,
                                        const juce::String& name) {
     auto imported = std::make_unique<soundx::engine::Wavetable>(
         soundx::engine::makeWavetableFromSample(*sample));
@@ -124,16 +141,17 @@ void SoundXAudioProcessor::applySample(std::shared_ptr<const soundx::engine::Sam
         soundx::engine::analyzeSpectral(*sample));
 
     suspendProcessing(true);
-    sample_ = std::move(sample);
-    importedWavetable_ = std::move(imported);
-    spectralModel_ = std::move(model);
-    sampleName_ = name;
+    auto& assets = slots_[size_t(slot)];
+    assets.sample = std::move(sample);
+    assets.wavetable = std::move(imported);
+    assets.model = std::move(model);
+    assets.name = name;
     rebindVoiceSources();
     suspendProcessing(false);
 }
 
-void SoundXAudioProcessor::loadSampleFile(const juce::File& file) {
-    importPool_.addJob([this, file] {
+void SoundXAudioProcessor::loadSampleFile(int slot, const juce::File& file) {
+    importPool_.addJob([this, slot, file] {
         juce::AudioFormatManager formats;
         formats.registerBasicFormats();
         std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(file));
@@ -165,8 +183,8 @@ void SoundXAudioProcessor::loadSampleFile(const juce::File& file) {
             for (auto& v : data->samples)
                 v /= peak;
 
-        juce::MessageManager::callAsync([this, data, name = file.getFileName()] {
-            applySample(data, name);
+        juce::MessageManager::callAsync([this, slot, data, name = file.getFileName()] {
+            applySample(slot, data, name);
         });
     });
 }
