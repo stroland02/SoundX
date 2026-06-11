@@ -13,6 +13,8 @@ Hybrid synthesizer VST3 (Windows). Current features:
   STRETCH time-stretches independently of pitch (0 = spectral freeze)
 - **Universal sample import** — one dropped sample becomes all three engines
   (wavetable bank, grain cloud, spectral model); switch with the mode selector
+- **Modulation** — 3 LFOs (5 shapes, 0.01–20 Hz) and 4 macro knobs, each
+  routable to any engine parameter including MORPH itself
 - HUD-styled resizable UI, full parameter automation and state recall
 
 ## Requirements

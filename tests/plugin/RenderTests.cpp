@@ -120,6 +120,50 @@ TEST_CASE("morph 1 plays slot B; empty slot B granular is silent") {
     }
 }
 
+TEST_CASE("macro routed to morph deterministically silences slot A") {
+    juce::ScopedJuceInitialiser_GUI juceInit;
+    SoundXAudioProcessor proc;
+    proc.prepareToPlay(44100.0, 512);
+    // slot B = granular with no sample (silent); macro1 -> morph, amount +1
+    setChoice(proc, "b_mode", 0.5f);
+    setChoice(proc, "macro1_dest", 1.0f / 12.0f); // index 1 of 13 = Morph
+    proc.apvts().getParameter("macro1_amount")->setValueNotifyingHost(1.0f); // +1
+
+    auto play = [&] {
+        juce::MidiBuffer midi;
+        midi.addEvent(juce::MidiMessage::noteOn(1, 60, 0.9f), 0);
+        auto held = renderBlocks(proc, midi, 20, 512);
+        midi.addEvent(juce::MidiMessage::noteOff(1, 60), 0);
+        renderBlocks(proc, midi, 80, 512); // flush the tail
+        return held;
+    };
+
+    proc.apvts().getParameter("macro1")->setValueNotifyingHost(0.0f);
+    auto atZero = play();
+    REQUIRE(atZero.allFinite);
+    REQUIRE(atZero.peakRms > 0.01f); // morph stays 0: slot A wavetable audible
+
+    proc.apvts().getParameter("macro1")->setValueNotifyingHost(1.0f);
+    auto atOne = play();
+    REQUIRE(atOne.allFinite);
+    REQUIRE(atOne.peakRms < 1.0e-4f); // morph pushed to 1: empty slot B = silence
+}
+
+TEST_CASE("mod source with amount 0 changes nothing") {
+    juce::ScopedJuceInitialiser_GUI juceInit;
+    SoundXAudioProcessor proc;
+    proc.prepareToPlay(44100.0, 512);
+    setChoice(proc, "lfo1_dest", 1.0f / 12.0f); // Morph
+    proc.apvts().getParameter("lfo1_rate")->setValueNotifyingHost(1.0f); // fast
+    // amount left at default 0
+
+    juce::MidiBuffer midi;
+    midi.addEvent(juce::MidiMessage::noteOn(1, 60, 0.9f), 0);
+    auto held = renderBlocks(proc, midi, 20, 512);
+    REQUIRE(held.allFinite);
+    REQUIRE(held.peakRms > 0.01f); // unmodulated slot A still plays
+}
+
 TEST_CASE("spectral-to-spectral mid-morph is audible and finite") {
     juce::ScopedJuceInitialiser_GUI juceInit;
     SoundXAudioProcessor proc;

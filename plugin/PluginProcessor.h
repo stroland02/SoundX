@@ -2,6 +2,7 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <array>
 #include <memory>
+#include "engine/Lfo.h"
 #include "engine/SampleData.h"
 #include "engine/SpectralModel.h"
 #include "engine/Wavetable.h"
@@ -38,6 +39,8 @@ public:
     juce::AudioProcessorValueTreeState& apvts() { return apvts_; }
 
     static constexpr int kNumSlots = 2;
+    static constexpr int kNumLfos = 3;
+    static constexpr int kNumMacros = 4;
 
     // Swaps a slot's sample + derived wavetable bank + spectral model. Called
     // from the message thread (file import) or tests; suspends processing
@@ -84,6 +87,17 @@ private:
     std::atomic<float>* sustain_ = nullptr;
     std::atomic<float>* release_ = nullptr;
     std::atomic<float>* morph_ = nullptr;
+
+    struct ModSourceParams {
+        std::atomic<float>* dest = nullptr;
+        std::atomic<float>* amount = nullptr;
+        std::atomic<float>* rate = nullptr;  // LFOs only
+        std::atomic<float>* shape = nullptr; // LFOs only
+        std::atomic<float>* value = nullptr; // macros only
+    };
+    std::array<ModSourceParams, kNumLfos> lfoParams_;
+    std::array<ModSourceParams, kNumMacros> macroParams_;
+    std::array<soundx::engine::Lfo, kNumLfos> lfos_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SoundXAudioProcessor)
 };

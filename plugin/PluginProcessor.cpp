@@ -9,6 +9,18 @@ juce::NormalisableRange<float> secondsRange() {
     r.setSkewForCentre(0.3f);
     return r;
 }
+
+// Modulation destinations. Index 0 is "Off"; the rest line up with
+// kDestRanges/kDestMins below.
+const juce::StringArray kDestNames{"Off",     "Morph",   "Gain",    "A Pos",  "A Grain",
+                                   "A Dens",  "A Spray", "A Strch", "B Pos",  "B Grain",
+                                   "B Dens",  "B Spray", "B Strch"};
+constexpr int kNumDests = 13;
+// natural-unit span and minimum of each destination (index 0 unused)
+constexpr std::array<float, kNumDests> kDestRanges = {0.0f, 1.0f, 1.0f, 1.0f, 495.0f, 99.5f, 1.0f,
+                                                      4.0f, 1.0f, 495.0f, 99.5f, 1.0f, 4.0f};
+constexpr std::array<float, kNumDests> kDestMins = {0.0f, 0.0f, 0.0f, 0.0f, 5.0f, 0.5f, 0.0f,
+                                                    0.0f, 0.0f, 5.0f, 0.5f, 0.0f, 0.0f};
 } // namespace
 
 juce::AudioProcessorValueTreeState::ParameterLayout SoundXAudioProcessor::createParameterLayout() {
@@ -43,6 +55,30 @@ juce::AudioProcessorValueTreeState::ParameterLayout SoundXAudioProcessor::create
         layout.add(std::make_unique<P>(juce::ParameterID{p + "_stretch", 1}, label + "Stretch",
                                        stretchRange, 1.0f));
     }
+
+    for (int i = 1; i <= kNumLfos; ++i) {
+        const juce::String p = "lfo" + juce::String(i);
+        juce::NormalisableRange<float> rateRange(0.01f, 20.0f);
+        rateRange.setSkewForCentre(2.0f);
+        layout.add(std::make_unique<P>(juce::ParameterID{p + "_rate", 1}, p.toUpperCase() + " Rate",
+                                       rateRange, 1.0f));
+        layout.add(std::make_unique<juce::AudioParameterChoice>(
+            juce::ParameterID{p + "_shape", 1}, p.toUpperCase() + " Shape",
+            juce::StringArray{"Sine", "Triangle", "Saw", "Square", "S&H"}, 0));
+        layout.add(std::make_unique<juce::AudioParameterChoice>(
+            juce::ParameterID{p + "_dest", 1}, p.toUpperCase() + " Destination", kDestNames, 0));
+        layout.add(std::make_unique<P>(juce::ParameterID{p + "_amount", 1}, p.toUpperCase() + " Amount",
+                                       juce::NormalisableRange<float>(-1.0f, 1.0f), 0.0f));
+    }
+    for (int m = 1; m <= kNumMacros; ++m) {
+        const juce::String p = "macro" + juce::String(m);
+        layout.add(std::make_unique<P>(juce::ParameterID{p, 1}, p.toUpperCase(),
+                                       juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f));
+        layout.add(std::make_unique<juce::AudioParameterChoice>(
+            juce::ParameterID{p + "_dest", 1}, p.toUpperCase() + " Destination", kDestNames, 0));
+        layout.add(std::make_unique<P>(juce::ParameterID{p + "_amount", 1}, p.toUpperCase() + " Amount",
+                                       juce::NormalisableRange<float>(-1.0f, 1.0f), 0.0f));
+    }
     return layout;
 }
 
@@ -65,6 +101,21 @@ SoundXAudioProcessor::SoundXAudioProcessor()
         sp.spray = apvts_.getRawParameterValue(p + "_spray");
         sp.stretch = apvts_.getRawParameterValue(p + "_stretch");
     }
+    for (int i = 0; i < kNumLfos; ++i) {
+        const juce::String p = "lfo" + juce::String(i + 1);
+        auto& mp = lfoParams_[size_t(i)];
+        mp.rate = apvts_.getRawParameterValue(p + "_rate");
+        mp.shape = apvts_.getRawParameterValue(p + "_shape");
+        mp.dest = apvts_.getRawParameterValue(p + "_dest");
+        mp.amount = apvts_.getRawParameterValue(p + "_amount");
+    }
+    for (int m = 0; m < kNumMacros; ++m) {
+        const juce::String p = "macro" + juce::String(m + 1);
+        auto& mp = macroParams_[size_t(m)];
+        mp.value = apvts_.getRawParameterValue(p);
+        mp.dest = apvts_.getRawParameterValue(p + "_dest");
+        mp.amount = apvts_.getRawParameterValue(p + "_amount");
+    }
 
     synth_.addSound(new SynthSound());
     for (int i = 0; i < kNumVoices; ++i)
@@ -74,6 +125,8 @@ SoundXAudioProcessor::SoundXAudioProcessor()
 
 void SoundXAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
     synth_.setCurrentPlaybackSampleRate(sampleRate);
+    for (auto& lfo : lfos_)
+        lfo.setSampleRate(sampleRate);
     for (int i = 0; i < synth_.getNumVoices(); ++i)
         if (auto* v = dynamic_cast<SynthVoice*>(synth_.getVoice(i)))
             v->prepare(sampleRate, samplesPerBlock);
@@ -84,22 +137,51 @@ void SoundXAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::
     juce::ScopedNoDenormals noDenormals;
     buffer.clear();
 
+    // --- control-rate modulation: accumulate per-destination offsets ---
+    std::array<float, kNumDests> offsets{};
+    for (int i = 0; i < kNumLfos; ++i) {
+        auto& mp = lfoParams_[size_t(i)];
+        auto& lfo = lfos_[size_t(i)];
+        lfo.setRate(mp.rate->load());
+        lfo.setShape(soundx::engine::Lfo::Shape(int(mp.shape->load() + 0.5f)));
+        const float value = lfo.advance(buffer.getNumSamples());
+        const int dest = int(mp.dest->load() + 0.5f);
+        if (dest > 0 && dest < kNumDests)
+            offsets[size_t(dest)] += value * mp.amount->load() * kDestRanges[size_t(dest)];
+    }
+    for (int m = 0; m < kNumMacros; ++m) {
+        auto& mp = macroParams_[size_t(m)];
+        const int dest = int(mp.dest->load() + 0.5f);
+        if (dest > 0 && dest < kNumDests)
+            offsets[size_t(dest)] += mp.value->load() * mp.amount->load() * kDestRanges[size_t(dest)];
+    }
+    auto modulated = [&offsets](float base, int dest) {
+        const float lo = kDestMins[size_t(dest)];
+        return juce::jlimit(lo, lo + kDestRanges[size_t(dest)], base + offsets[size_t(dest)]);
+    };
+
     const float a = attack_->load(), d = decay_->load(), s = sustain_->load(),
-                r = release_->load(), morph = morph_->load();
+                r = release_->load();
+    const float morph = modulated(morph_->load(), 1);
+    const float gain = modulated(gain_->load(), 2);
     for (int i = 0; i < synth_.getNumVoices(); ++i)
         if (auto* v = dynamic_cast<SynthVoice*>(synth_.getVoice(i))) {
             v->setMorph(morph);
             for (int slot = 0; slot < kNumSlots; ++slot) {
                 const auto& sp = slotParams_[size_t(slot)];
+                const int base = 3 + slot * 5; // dest indices: pos, grain, dens, spray, stretch
                 v->setSlotParams(slot, SynthVoice::Mode(int(sp.mode->load() + 0.5f)),
-                                 sp.position->load(), sp.grainsize->load(),
-                                 sp.density->load(), sp.spray->load(), sp.stretch->load());
+                                 modulated(sp.position->load(), base),
+                                 modulated(sp.grainsize->load(), base + 1),
+                                 modulated(sp.density->load(), base + 2),
+                                 modulated(sp.spray->load(), base + 3),
+                                 modulated(sp.stretch->load(), base + 4));
             }
             v->setSharedParams(a, d, s, r);
         }
 
     synth_.renderNextBlock(buffer, midi, 0, buffer.getNumSamples());
-    buffer.applyGain(gain_->load());
+    buffer.applyGain(gain);
 }
 
 bool SoundXAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const {
