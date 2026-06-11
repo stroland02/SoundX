@@ -2,6 +2,10 @@
 
 Hybrid synthesizer VST3 (Windows). Current features:
 
+- **Dual engine slots (A/B)** — each slot has its own sample, engine mode, and
+  parameters; the MORPH control blends them. Spectral↔spectral morphs
+  interpolate the partials themselves, so frequencies glide through sounds
+  neither slot makes alone
 - 16-voice wavetable synth (sine→saw factory bank, position morphing)
 - **Granular engine** — drag any audio file in and play it as a grain cloud
   (grain size / density / spray), pitch-tracked across the keyboard
