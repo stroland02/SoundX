@@ -1,5 +1,7 @@
 #pragma once
 #include <juce_audio_utils/juce_audio_utils.h>
+#include <memory>
+#include "engine/SampleData.h"
 #include "engine/Wavetable.h"
 
 class SoundXAudioProcessor : public juce::AudioProcessor {
@@ -33,6 +35,16 @@ public:
 
     juce::AudioProcessorValueTreeState& apvts() { return apvts_; }
 
+    // Swaps in a new sample + derived wavetable bank. Called from the message
+    // thread (file import) or tests; suspends processing during the swap.
+    void applySample(std::shared_ptr<const soundx::engine::SampleData> sample,
+                     const juce::String& name);
+
+    // Kicks off async decode+import of an audio file (background thread).
+    void loadSampleFile(const juce::File& file);
+
+    juce::String currentSampleName() const { return sampleName_; }
+
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
@@ -40,12 +52,23 @@ private:
     juce::Synthesiser synth_;
     juce::AudioProcessorValueTreeState apvts_;
 
+    void rebindVoiceSources();
+
+    std::shared_ptr<const soundx::engine::SampleData> sample_;       // grain source
+    std::unique_ptr<soundx::engine::Wavetable> importedWavetable_;   // from sample
+    juce::String sampleName_;
+    juce::ThreadPool importPool_{1};
+
     std::atomic<float>* gain_ = nullptr;
     std::atomic<float>* attack_ = nullptr;
     std::atomic<float>* decay_ = nullptr;
     std::atomic<float>* sustain_ = nullptr;
     std::atomic<float>* release_ = nullptr;
     std::atomic<float>* position_ = nullptr;
+    std::atomic<float>* mode_ = nullptr;
+    std::atomic<float>* grainsize_ = nullptr;
+    std::atomic<float>* density_ = nullptr;
+    std::atomic<float>* spray_ = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SoundXAudioProcessor)
 };
