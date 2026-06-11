@@ -1,6 +1,14 @@
 # SoundX
 
-GPU-accelerated audio application.
+Hybrid synthesizer VST3 (Windows). Current features:
+
+- 16-voice wavetable synth (sine→saw factory bank, position morphing)
+- **Granular engine** — drag any audio file in and play it as a grain cloud
+  (grain size / density / spray), pitch-tracked across the keyboard
+- **Universal sample import** — a dropped sample also becomes a wavetable bank
+  (8 pitch-synchronous slices scanning the sample's evolution); switch engines
+  on the same sample with the mode selector
+- HUD-styled resizable UI, full parameter automation and state recall
 
 ## Requirements
 

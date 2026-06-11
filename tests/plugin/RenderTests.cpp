@@ -1,6 +1,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cmath>
+#include <numbers>
 #include "PluginProcessor.h"
+#include "engine/SampleImporter.h"
 
 namespace {
 struct BlockResult {
@@ -56,4 +58,40 @@ TEST_CASE("state save and restore round-trips a parameter") {
     gain->setValueNotifyingHost(0.9f);
     proc.setStateInformation(state.getData(), int(state.getSize()));
     REQUIRE(std::abs(gain->getValue() - 0.25f) < 1.0e-4f);
+}
+
+TEST_CASE("granular mode plays a programmatically loaded sample") {
+    juce::ScopedJuceInitialiser_GUI juceInit;
+    SoundXAudioProcessor proc;
+    proc.prepareToPlay(44100.0, 512);
+
+    auto sample = std::make_shared<soundx::engine::SampleData>();
+    sample->sourceSampleRate = 44100.0;
+    sample->samples.resize(44100);
+    for (std::size_t i = 0; i < sample->samples.size(); ++i)
+        sample->samples[i] = float(std::sin(2.0 * std::numbers::pi * 440.0 * double(i) / 44100.0));
+    proc.applySample(sample, "test-sine");
+
+    auto* mode = proc.apvts().getParameter("mode");
+    REQUIRE(mode != nullptr);
+    mode->setValueNotifyingHost(1.0f); // Granular
+
+    juce::MidiBuffer midi;
+    midi.addEvent(juce::MidiMessage::noteOn(1, 60, 0.9f), 0);
+    auto held = renderBlocks(proc, midi, 40, 512);
+    REQUIRE(held.allFinite);
+    REQUIRE(held.peakRms > 0.01f);
+}
+
+TEST_CASE("granular mode without a sample is silent but stable") {
+    juce::ScopedJuceInitialiser_GUI juceInit;
+    SoundXAudioProcessor proc;
+    proc.prepareToPlay(44100.0, 512);
+    proc.apvts().getParameter("mode")->setValueNotifyingHost(1.0f);
+
+    juce::MidiBuffer midi;
+    midi.addEvent(juce::MidiMessage::noteOn(1, 60, 0.9f), 0);
+    auto held = renderBlocks(proc, midi, 10, 512);
+    REQUIRE(held.allFinite);
+    REQUIRE(held.peakRms < 1.0e-4f);
 }
