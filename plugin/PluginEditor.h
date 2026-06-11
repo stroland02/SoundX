@@ -2,6 +2,7 @@
 #include <array>
 #include "OrbitView.h"
 #include "PluginProcessor.h"
+#include "PresetManager.h"
 
 class SoundXAudioProcessorEditor : public juce::AudioProcessorEditor,
                                    public juce::FileDragAndDropTarget {
@@ -65,7 +66,12 @@ private:
     std::array<ModColumn, SoundXAudioProcessor::kNumLfos + SoundXAudioProcessor::kNumMacros> modColumns_;
     std::array<FxColumn, 5> fxColumns_;
     OrbitView orbitView_;
+    PresetManager presetManager_;
+    juce::ComboBox presetBox_;
+    juce::TextButton saveButton_{"SAVE"};
     int dragHoverSlot_ = -1; // -1 = none
+
+    void rebuildPresetBox();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SoundXAudioProcessorEditor)
 };

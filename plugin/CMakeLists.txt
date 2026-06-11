@@ -11,6 +11,9 @@ juce_add_plugin(SoundX
     FORMATS VST3 Standalone
     PRODUCT_NAME "SoundX")
 
+file(GLOB SOUNDX_FACTORY_PRESETS ${CMAKE_CURRENT_SOURCE_DIR}/../presets/factory/*.soundxpreset)
+juce_add_binary_data(SoundXAssets SOURCES ${SOUNDX_FACTORY_PRESETS})
+
 target_sources(SoundX PRIVATE
     PluginProcessor.cpp
     PluginEditor.cpp
@@ -25,6 +28,7 @@ target_compile_definitions(SoundX PUBLIC
 
 target_link_libraries(SoundX
     PUBLIC
+        SoundXAssets
         juce::juce_audio_utils
     PRIVATE
         juce::juce_recommended_config_flags

@@ -112,8 +112,31 @@ void SoundXAudioProcessorEditor::buildFxColumn(
 }
 
 SoundXAudioProcessorEditor::SoundXAudioProcessorEditor(SoundXAudioProcessor& p)
-    : AudioProcessorEditor(&p), processor_(p), orbitView_(p) {
+    : AudioProcessorEditor(&p), processor_(p), orbitView_(p), presetManager_(p.apvts()) {
     addAndMakeVisible(orbitView_);
+
+    presetBox_.setTextWhenNothingSelected("PRESETS");
+    presetBox_.setColour(juce::ComboBox::backgroundColourId, juce::Colour(kBackground));
+    presetBox_.setColour(juce::ComboBox::textColourId, juce::Colour(kAccent));
+    presetBox_.setColour(juce::ComboBox::outlineColourId, juce::Colour(kDim));
+    presetBox_.setColour(juce::ComboBox::arrowColourId, juce::Colour(kAccent));
+    presetBox_.setWantsKeyboardFocus(false);
+    presetBox_.onChange = [this] {
+        const int idx = presetBox_.getSelectedItemIndex();
+        if (idx >= 0)
+            presetManager_.applyPreset(idx);
+    };
+    addAndMakeVisible(presetBox_);
+    rebuildPresetBox();
+
+    saveButton_.setColour(juce::TextButton::buttonColourId, juce::Colour(kBackground));
+    saveButton_.setColour(juce::TextButton::textColourOffId, juce::Colour(kAccent));
+    saveButton_.setWantsKeyboardFocus(false);
+    saveButton_.onClick = [this] {
+        presetManager_.saveUserPreset();
+        rebuildPresetBox();
+    };
+    addAndMakeVisible(saveButton_);
     for (int i = 0; i < kNumSharedSliders; ++i)
         styleSlider(shared_[size_t(i)], kSharedIds[size_t(i)], kSharedNames[size_t(i)]);
 
@@ -170,6 +193,13 @@ SoundXAudioProcessorEditor::SoundXAudioProcessorEditor(SoundXAudioProcessor& p)
     setResizable(true, true);
     setResizeLimits(960, 900, 1900, 1500);
     setSize(1100, 1000);
+}
+
+void SoundXAudioProcessorEditor::rebuildPresetBox() {
+    presetBox_.clear(juce::dontSendNotification);
+    int id = 1;
+    for (const auto& name : presetManager_.presetNames())
+        presetBox_.addItem(name, id++);
 }
 
 void SoundXAudioProcessorEditor::mouseUp(const juce::MouseEvent& e) {
@@ -247,7 +277,10 @@ void SoundXAudioProcessorEditor::paint(juce::Graphics& g) {
 
 void SoundXAudioProcessorEditor::resized() {
     auto area = getLocalBounds().reduced(24);
-    area.removeFromTop(44); // title
+    auto titleRow = area.removeFromTop(44).reduced(0, 9);
+    presetBox_.setBounds(titleRow.removeFromLeft(240));
+    titleRow.removeFromLeft(6);
+    saveButton_.setBounds(titleRow.removeFromLeft(60));
 
     auto modeRow = area.removeFromTop(24);
     const int boxW = 150;
