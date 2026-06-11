@@ -1,5 +1,6 @@
 #pragma once
 #include <juce_audio_utils/juce_audio_utils.h>
+#include <array>
 #include <memory>
 #include "engine/SampleData.h"
 #include "engine/SpectralModel.h"
@@ -36,15 +37,18 @@ public:
 
     juce::AudioProcessorValueTreeState& apvts() { return apvts_; }
 
-    // Swaps in a new sample + derived wavetable bank. Called from the message
-    // thread (file import) or tests; suspends processing during the swap.
-    void applySample(std::shared_ptr<const soundx::engine::SampleData> sample,
+    static constexpr int kNumSlots = 2;
+
+    // Swaps a slot's sample + derived wavetable bank + spectral model. Called
+    // from the message thread (file import) or tests; suspends processing
+    // during the swap.
+    void applySample(int slot, std::shared_ptr<const soundx::engine::SampleData> sample,
                      const juce::String& name);
 
-    // Kicks off async decode+import of an audio file (background thread).
-    void loadSampleFile(const juce::File& file);
+    // Kicks off async decode+import of an audio file into a slot (background thread).
+    void loadSampleFile(int slot, const juce::File& file);
 
-    juce::String currentSampleName() const { return sampleName_; }
+    juce::String currentSampleName(int slot) const { return slots_[size_t(slot)].name; }
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
@@ -55,10 +59,23 @@ private:
 
     void rebindVoiceSources();
 
-    std::shared_ptr<const soundx::engine::SampleData> sample_;       // grain source
-    std::unique_ptr<soundx::engine::Wavetable> importedWavetable_;   // from sample
-    std::unique_ptr<soundx::engine::SpectralModel> spectralModel_;   // from sample
-    juce::String sampleName_;
+    struct SlotAssets {
+        std::shared_ptr<const soundx::engine::SampleData> sample;      // grain source
+        std::unique_ptr<soundx::engine::Wavetable> wavetable;          // from sample
+        std::unique_ptr<soundx::engine::SpectralModel> model;          // from sample
+        juce::String name;
+    };
+    struct SlotParams {
+        std::atomic<float>* mode = nullptr;
+        std::atomic<float>* position = nullptr;
+        std::atomic<float>* grainsize = nullptr;
+        std::atomic<float>* density = nullptr;
+        std::atomic<float>* spray = nullptr;
+        std::atomic<float>* stretch = nullptr;
+    };
+
+    std::array<SlotAssets, kNumSlots> slots_;
+    std::array<SlotParams, kNumSlots> slotParams_;
     juce::ThreadPool importPool_{1};
 
     std::atomic<float>* gain_ = nullptr;
@@ -66,12 +83,7 @@ private:
     std::atomic<float>* decay_ = nullptr;
     std::atomic<float>* sustain_ = nullptr;
     std::atomic<float>* release_ = nullptr;
-    std::atomic<float>* position_ = nullptr;
-    std::atomic<float>* mode_ = nullptr;
-    std::atomic<float>* grainsize_ = nullptr;
-    std::atomic<float>* density_ = nullptr;
-    std::atomic<float>* spray_ = nullptr;
-    std::atomic<float>* stretch_ = nullptr;
+    std::atomic<float>* morph_ = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SoundXAudioProcessor)
 };

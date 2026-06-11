@@ -25,6 +25,21 @@ BlockResult renderBlocks(SoundXAudioProcessor& proc, juce::MidiBuffer& midi, int
     }
     return r;
 }
+
+std::shared_ptr<soundx::engine::SampleData> sineSampleData(double hz = 440.0) {
+    auto sample = std::make_shared<soundx::engine::SampleData>();
+    sample->sourceSampleRate = 44100.0;
+    sample->samples.resize(44100);
+    for (std::size_t i = 0; i < sample->samples.size(); ++i)
+        sample->samples[i] = float(std::sin(2.0 * std::numbers::pi * hz * double(i) / 44100.0));
+    return sample;
+}
+
+void setChoice(SoundXAudioProcessor& proc, const char* id, float normalized) {
+    auto* p = proc.apvts().getParameter(id);
+    REQUIRE(p != nullptr);
+    p->setValueNotifyingHost(normalized);
+}
 } // namespace
 
 TEST_CASE("held note produces finite, audible output; release returns to silence") {
@@ -60,21 +75,12 @@ TEST_CASE("state save and restore round-trips a parameter") {
     REQUIRE(std::abs(gain->getValue() - 0.25f) < 1.0e-4f);
 }
 
-TEST_CASE("granular mode plays a programmatically loaded sample") {
+TEST_CASE("slot A granular plays a programmatically loaded sample") {
     juce::ScopedJuceInitialiser_GUI juceInit;
     SoundXAudioProcessor proc;
     proc.prepareToPlay(44100.0, 512);
-
-    auto sample = std::make_shared<soundx::engine::SampleData>();
-    sample->sourceSampleRate = 44100.0;
-    sample->samples.resize(44100);
-    for (std::size_t i = 0; i < sample->samples.size(); ++i)
-        sample->samples[i] = float(std::sin(2.0 * std::numbers::pi * 440.0 * double(i) / 44100.0));
-    proc.applySample(sample, "test-sine");
-
-    auto* mode = proc.apvts().getParameter("mode");
-    REQUIRE(mode != nullptr);
-    mode->setValueNotifyingHost(0.5f); // middle choice = Granular
+    proc.applySample(0, sineSampleData(), "test-sine");
+    setChoice(proc, "a_mode", 0.5f); // Granular
 
     juce::MidiBuffer midi;
     midi.addEvent(juce::MidiMessage::noteOn(1, 60, 0.9f), 0);
@@ -83,38 +89,50 @@ TEST_CASE("granular mode plays a programmatically loaded sample") {
     REQUIRE(held.peakRms > 0.01f);
 }
 
-TEST_CASE("spectral mode resynthesizes a loaded sample") {
+TEST_CASE("morph 1 plays slot B; empty slot B granular is silent") {
+    juce::ScopedJuceInitialiser_GUI juceInit;
+
+    SECTION("slot B granular with a sample is audible at morph 1") {
+        SoundXAudioProcessor proc;
+        proc.prepareToPlay(44100.0, 512);
+        proc.applySample(1, sineSampleData(), "b-sine");
+        setChoice(proc, "b_mode", 0.5f); // Granular
+        proc.apvts().getParameter("morph")->setValueNotifyingHost(1.0f);
+
+        juce::MidiBuffer midi;
+        midi.addEvent(juce::MidiMessage::noteOn(1, 60, 0.9f), 0);
+        auto held = renderBlocks(proc, midi, 40, 512);
+        REQUIRE(held.allFinite);
+        REQUIRE(held.peakRms > 0.01f);
+    }
+
+    SECTION("slot B granular without a sample is silent at morph 1") {
+        SoundXAudioProcessor proc;
+        proc.prepareToPlay(44100.0, 512);
+        setChoice(proc, "b_mode", 0.5f); // Granular, no sample loaded
+        proc.apvts().getParameter("morph")->setValueNotifyingHost(1.0f);
+
+        juce::MidiBuffer midi;
+        midi.addEvent(juce::MidiMessage::noteOn(1, 60, 0.9f), 0);
+        auto held = renderBlocks(proc, midi, 10, 512);
+        REQUIRE(held.allFinite);
+        REQUIRE(held.peakRms < 1.0e-4f);
+    }
+}
+
+TEST_CASE("spectral-to-spectral mid-morph is audible and finite") {
     juce::ScopedJuceInitialiser_GUI juceInit;
     SoundXAudioProcessor proc;
     proc.prepareToPlay(44100.0, 512);
-
-    auto sample = std::make_shared<soundx::engine::SampleData>();
-    sample->sourceSampleRate = 44100.0;
-    sample->samples.resize(44100);
-    for (std::size_t i = 0; i < sample->samples.size(); ++i)
-        sample->samples[i] = float(std::sin(2.0 * std::numbers::pi * 440.0 * double(i) / 44100.0));
-    proc.applySample(sample, "test-sine");
-
-    auto* mode = proc.apvts().getParameter("mode");
-    REQUIRE(mode != nullptr);
-    mode->setValueNotifyingHost(1.0f); // last choice = Spectral (normalized)
+    proc.applySample(0, sineSampleData(440.0), "a-440");
+    proc.applySample(1, sineSampleData(660.0), "b-660");
+    setChoice(proc, "a_mode", 1.0f); // Spectral
+    setChoice(proc, "b_mode", 1.0f); // Spectral
+    proc.apvts().getParameter("morph")->setValueNotifyingHost(0.5f);
 
     juce::MidiBuffer midi;
     midi.addEvent(juce::MidiMessage::noteOn(1, 60, 0.9f), 0);
     auto held = renderBlocks(proc, midi, 40, 512);
     REQUIRE(held.allFinite);
     REQUIRE(held.peakRms > 0.01f);
-}
-
-TEST_CASE("granular mode without a sample is silent but stable") {
-    juce::ScopedJuceInitialiser_GUI juceInit;
-    SoundXAudioProcessor proc;
-    proc.prepareToPlay(44100.0, 512);
-    proc.apvts().getParameter("mode")->setValueNotifyingHost(0.5f); // Granular
-
-    juce::MidiBuffer midi;
-    midi.addEvent(juce::MidiMessage::noteOn(1, 60, 0.9f), 0);
-    auto held = renderBlocks(proc, midi, 10, 512);
-    REQUIRE(held.allFinite);
-    REQUIRE(held.peakRms < 1.0e-4f);
 }
