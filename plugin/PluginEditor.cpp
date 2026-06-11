@@ -51,6 +51,47 @@ void SoundXAudioProcessorEditor::styleSlider(LabeledSlider& s, const char* param
     s.attachment = std::make_unique<SliderAttachment>(processor_.apvts(), paramId, s.slider);
 }
 
+void SoundXAudioProcessorEditor::buildModColumn(ModColumn& col, const juce::String& paramPrefix,
+                                                const juce::String& title, bool isLfo) {
+    col.title.setText(title, juce::dontSendNotification);
+    col.title.setJustificationType(juce::Justification::centred);
+    col.title.setColour(juce::Label::textColourId, juce::Colour(kAccent));
+    col.title.setFont(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(), 11.0f, juce::Font::plain));
+    addAndMakeVisible(col.title);
+
+    auto styleBox = [this](juce::ComboBox& box) {
+        box.setColour(juce::ComboBox::backgroundColourId, juce::Colour(kBackground));
+        box.setColour(juce::ComboBox::textColourId, juce::Colour(kAccent));
+        box.setColour(juce::ComboBox::outlineColourId, juce::Colour(kDim));
+        box.setColour(juce::ComboBox::arrowColourId, juce::Colour(kAccent));
+        box.setWantsKeyboardFocus(false);
+        addAndMakeVisible(box);
+    };
+
+    if (isLfo) {
+        int id = 1;
+        for (const auto* shape : {"SINE", "TRI", "SAW", "SQR", "S&H"})
+            col.shapeBox.addItem(shape, id++);
+        styleBox(col.shapeBox);
+        col.shapeAttachment = std::make_unique<ComboAttachment>(
+            processor_.apvts(), paramPrefix + "_shape", col.shapeBox);
+        styleSlider(col.main, (paramPrefix + "_rate").toRawUTF8(), "RATE");
+    } else {
+        styleSlider(col.main, paramPrefix.toRawUTF8(), "VALUE");
+    }
+
+    {
+        int id = 1;
+        for (const auto* dest : {"OFF", "MORPH", "GAIN", "A POS", "A GRAIN", "A DENS", "A SPRAY",
+                                 "A STRCH", "B POS", "B GRAIN", "B DENS", "B SPRAY", "B STRCH"})
+            col.destBox.addItem(dest, id++);
+    }
+    styleBox(col.destBox);
+    col.destAttachment = std::make_unique<ComboAttachment>(
+        processor_.apvts(), paramPrefix + "_dest", col.destBox);
+    styleSlider(col.amount, (paramPrefix + "_amount").toRawUTF8(), "AMT");
+}
+
 SoundXAudioProcessorEditor::SoundXAudioProcessorEditor(SoundXAudioProcessor& p)
     : AudioProcessorEditor(&p), processor_(p) {
     for (int i = 0; i < kNumSharedSliders; ++i)
@@ -87,11 +128,18 @@ SoundXAudioProcessorEditor::SoundXAudioProcessorEditor(SoundXAudioProcessor& p)
             processor_.apvts(), juce::String(slotPrefix(slot)) + "_mode", box);
     }
 
+    for (int i = 0; i < SoundXAudioProcessor::kNumLfos; ++i)
+        buildModColumn(modColumns_[size_t(i)], "lfo" + juce::String(i + 1),
+                       "LFO " + juce::String(i + 1), true);
+    for (int m = 0; m < SoundXAudioProcessor::kNumMacros; ++m)
+        buildModColumn(modColumns_[size_t(SoundXAudioProcessor::kNumLfos + m)],
+                       "macro" + juce::String(m + 1), "MACRO " + juce::String(m + 1), false);
+
     setWantsKeyboardFocus(false);
     addMouseListener(this, true);
     setResizable(true, true);
-    setResizeLimits(820, 460, 1800, 1000);
-    setSize(1020, 560);
+    setResizeLimits(880, 620, 1900, 1200);
+    setSize(1060, 720);
 }
 
 void SoundXAudioProcessorEditor::mouseUp(const juce::MouseEvent& e) {
@@ -184,12 +232,33 @@ void SoundXAudioProcessorEditor::resized() {
     morph_.slider.setBounds(morphRow);
     area.removeFromTop(6);
 
-    auto sharedRow = area.removeFromTop(area.getHeight() / 2);
+    auto sharedRow = area.removeFromTop(area.getHeight() / 3);
     const int sharedCell = sharedRow.getWidth() / kNumSharedSliders;
     for (auto& s : shared_) {
         auto col = sharedRow.removeFromLeft(sharedCell).reduced(8);
         s.label.setBounds(col.removeFromTop(16));
         s.slider.setBounds(col.withHeight(juce::jmin(col.getHeight(), 110)));
+    }
+
+    auto modRow = area.removeFromTop(area.getHeight() / 2);
+    const int modCell = modRow.getWidth() / int(modColumns_.size());
+    for (auto& col : modColumns_) {
+        auto c = modRow.removeFromLeft(modCell).reduced(4);
+        col.title.setBounds(c.removeFromTop(14));
+        if (col.shapeAttachment != nullptr)
+            col.shapeBox.setBounds(c.removeFromTop(20).reduced(2, 0));
+        else
+            c.removeFromTop(20);
+        auto knobs = c;
+        const int half = knobs.getWidth() / 2;
+        auto left = knobs.removeFromLeft(half).reduced(2);
+        col.main.label.setBounds(left.removeFromTop(13));
+        auto leftKnob = left.removeFromTop(juce::jmin(left.getHeight() - 20, 64));
+        col.main.slider.setBounds(leftKnob);
+        col.destBox.setBounds(left.removeFromTop(18).reduced(1, 0));
+        auto right = knobs.reduced(2);
+        col.amount.label.setBounds(right.removeFromTop(13));
+        col.amount.slider.setBounds(right.removeFromTop(juce::jmin(right.getHeight() - 20, 64)));
     }
 
     auto slotRow = area;
