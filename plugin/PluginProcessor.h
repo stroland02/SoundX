@@ -1,8 +1,11 @@
 #pragma once
 #include <juce_audio_utils/juce_audio_utils.h>
+#include "engine/Wavetable.h"
 
 class SoundXAudioProcessor : public juce::AudioProcessor {
 public:
+    static constexpr int kNumVoices = 16;
+
     SoundXAudioProcessor();
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override;
@@ -28,6 +31,21 @@ public:
     void getStateInformation(juce::MemoryBlock& destData) override;
     void setStateInformation(const void* data, int sizeInBytes) override;
 
+    juce::AudioProcessorValueTreeState& apvts() { return apvts_; }
+
 private:
+    static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
+
+    soundx::engine::Wavetable wavetable_ = soundx::engine::Wavetable::makeSineSaw();
+    juce::Synthesiser synth_;
+    juce::AudioProcessorValueTreeState apvts_;
+
+    std::atomic<float>* gain_ = nullptr;
+    std::atomic<float>* attack_ = nullptr;
+    std::atomic<float>* decay_ = nullptr;
+    std::atomic<float>* sustain_ = nullptr;
+    std::atomic<float>* release_ = nullptr;
+    std::atomic<float>* position_ = nullptr;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SoundXAudioProcessor)
 };

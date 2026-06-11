@@ -11,3 +11,8 @@ target_include_directories(EngineTests PRIVATE ${CMAKE_SOURCE_DIR}/plugin)
 target_compile_features(EngineTests PRIVATE cxx_std_20)
 target_link_libraries(EngineTests PRIVATE Catch2::Catch2WithMain)
 catch_discover_tests(EngineTests)
+
+add_executable(PluginRenderTests
+    plugin/RenderTests.cpp)
+target_link_libraries(PluginRenderTests PRIVATE SoundX Catch2::Catch2WithMain)
+catch_discover_tests(PluginRenderTests)
