@@ -2,16 +2,17 @@
 // JUCE-free. render() is RT-safe: writes additively into caller's buffer.
 #include <cmath>
 #include "Adsr.h"
+#include "SoundSource.h"
 #include "Wavetable.h"
 #include "WavetableOscillator.h"
 
 namespace soundx::engine {
 
-class WavetableVoice {
+class WavetableVoice : public SoundSource {
 public:
     explicit WavetableVoice(const Wavetable& wavetable) : osc_(wavetable) {}
 
-    void setSampleRate(double sampleRate) {
+    void setSampleRate(double sampleRate) override {
         osc_.setSampleRate(sampleRate);
         env_.setSampleRate(sampleRate);
     }
@@ -21,18 +22,21 @@ public:
         osc_.setPosition(position01);
     }
 
-    void noteOn(int midiNote, float velocity01) {
+    // Retarget to a different (already-built) bank. Safe between blocks only.
+    void setWavetable(const Wavetable* wavetable) { osc_.setTable(wavetable); }
+
+    void noteOn(int midiNote, float velocity01) override {
         velocity_ = velocity01;
         osc_.setFrequency(midiNoteToHz(midiNote));
         osc_.reset();
         env_.noteOn();
     }
 
-    void noteOff() { env_.noteOff(); }
-    void kill() { env_.reset(); }
-    bool isActive() const { return env_.isActive(); }
+    void noteOff() override { env_.noteOff(); }
+    void kill() override { env_.reset(); }
+    bool isActive() const override { return env_.isActive(); }
 
-    void render(float* dest, int numSamples) noexcept {
+    void render(float* dest, int numSamples) noexcept override {
         if (!isActive())
             return;
         for (int i = 0; i < numSamples; ++i)
