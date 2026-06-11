@@ -25,13 +25,19 @@ juce::AudioProcessorValueTreeState::ParameterLayout SoundXAudioProcessor::create
                                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f));
     layout.add(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID{"mode", 1}, "Engine Mode",
-        juce::StringArray{"Wavetable", "Granular"}, 0));
+        juce::StringArray{"Wavetable", "Granular", "Spectral"}, 0));
     layout.add(std::make_unique<P>(juce::ParameterID{"grainsize", 1}, "Grain Size",
                                    juce::NormalisableRange<float>(5.0f, 500.0f, 0.0f, 0.4f), 100.0f));
     layout.add(std::make_unique<P>(juce::ParameterID{"density", 1}, "Density",
                                    juce::NormalisableRange<float>(0.5f, 100.0f, 0.0f, 0.4f), 30.0f));
     layout.add(std::make_unique<P>(juce::ParameterID{"spray", 1}, "Spray",
                                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.2f));
+    {
+        juce::NormalisableRange<float> stretchRange(0.0f, 4.0f);
+        stretchRange.setSkewForCentre(1.0f);
+        layout.add(std::make_unique<P>(juce::ParameterID{"stretch", 1}, "Stretch",
+                                       stretchRange, 1.0f));
+    }
     return layout;
 }
 
@@ -48,6 +54,7 @@ SoundXAudioProcessor::SoundXAudioProcessor()
     grainsize_ = apvts_.getRawParameterValue("grainsize");
     density_ = apvts_.getRawParameterValue("density");
     spray_ = apvts_.getRawParameterValue("spray");
+    stretch_ = apvts_.getRawParameterValue("stretch");
 
     synth_.addSound(new SynthSound());
     for (int i = 0; i < kNumVoices; ++i)
@@ -70,12 +77,12 @@ void SoundXAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::
     const float a = attack_->load(), d = decay_->load(), s = sustain_->load(),
                 r = release_->load(), pos = position_->load();
     const float gsize = grainsize_->load(), dens = density_->load(), spr = spray_->load();
-    const auto mode = mode_->load() >= 0.5f ? SynthVoice::Mode::granular
-                                            : SynthVoice::Mode::wavetable;
+    const float stretch = stretch_->load();
+    const auto mode = SynthVoice::Mode(int(mode_->load() + 0.5f));
     for (int i = 0; i < synth_.getNumVoices(); ++i)
         if (auto* v = dynamic_cast<SynthVoice*>(synth_.getVoice(i))) {
             v->setMode(mode);
-            v->setParams(a, d, s, r, pos, gsize, dens, spr);
+            v->setParams(a, d, s, r, pos, gsize, dens, spr, stretch);
         }
 
     synth_.renderNextBlock(buffer, midi, 0, buffer.getNumSamples());
@@ -106,17 +113,20 @@ void SoundXAudioProcessor::rebindVoiceSources() {
     const auto* wt = importedWavetable_ != nullptr ? importedWavetable_.get() : &wavetable_;
     for (int i = 0; i < synth_.getNumVoices(); ++i)
         if (auto* v = dynamic_cast<SynthVoice*>(synth_.getVoice(i)))
-            v->setSources(wt, sample_.get());
+            v->setSources(wt, sample_.get(), spectralModel_.get());
 }
 
 void SoundXAudioProcessor::applySample(std::shared_ptr<const soundx::engine::SampleData> sample,
                                        const juce::String& name) {
     auto imported = std::make_unique<soundx::engine::Wavetable>(
         soundx::engine::makeWavetableFromSample(*sample));
+    auto model = std::make_unique<soundx::engine::SpectralModel>(
+        soundx::engine::analyzeSpectral(*sample));
 
     suspendProcessing(true);
     sample_ = std::move(sample);
     importedWavetable_ = std::move(imported);
+    spectralModel_ = std::move(model);
     sampleName_ = name;
     rebindVoiceSources();
     suspendProcessing(false);

@@ -2,6 +2,7 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <memory>
 #include "engine/SampleData.h"
+#include "engine/SpectralModel.h"
 #include "engine/Wavetable.h"
 
 class SoundXAudioProcessor : public juce::AudioProcessor {
@@ -56,6 +57,7 @@ private:
 
     std::shared_ptr<const soundx::engine::SampleData> sample_;       // grain source
     std::unique_ptr<soundx::engine::Wavetable> importedWavetable_;   // from sample
+    std::unique_ptr<soundx::engine::SpectralModel> spectralModel_;   // from sample
     juce::String sampleName_;
     juce::ThreadPool importPool_{1};
 
@@ -69,6 +71,7 @@ private:
     std::atomic<float>* grainsize_ = nullptr;
     std::atomic<float>* density_ = nullptr;
     std::atomic<float>* spray_ = nullptr;
+    std::atomic<float>* stretch_ = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SoundXAudioProcessor)
 };

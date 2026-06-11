@@ -16,7 +16,7 @@ public:
     void fileDragExit(const juce::StringArray&) override;
 
 private:
-    static constexpr int kNumSliders = 9;
+    static constexpr int kNumSliders = 10;
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
     using ComboAttachment = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
 
