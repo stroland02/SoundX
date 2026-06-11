@@ -7,6 +7,7 @@ public:
     explicit SoundXAudioProcessorEditor(SoundXAudioProcessor&);
     void paint(juce::Graphics&) override;
     void resized() override;
+    void mouseUp(const juce::MouseEvent&) override;
 
 private:
     static constexpr int kNumSliders = 6;

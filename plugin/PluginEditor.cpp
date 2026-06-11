@@ -1,5 +1,15 @@
 #include "PluginEditor.h"
 
+#if JUCE_WINDOWS
+ #ifndef NOMINMAX
+  #define NOMINMAX
+ #endif
+ #ifndef WIN32_LEAN_AND_MEAN
+  #define WIN32_LEAN_AND_MEAN
+ #endif
+ #include <windows.h>
+#endif
+
 namespace {
 constexpr auto kBackground = 0xff02090c;
 constexpr auto kAccent = 0xff22d3ee;
@@ -35,9 +45,25 @@ SoundXAudioProcessorEditor::SoundXAudioProcessorEditor(SoundXAudioProcessor& p)
         s.attachment = std::make_unique<Attachment>(processor_.apvts(), kParamIds[size_t(i)], s.slider);
     }
     setWantsKeyboardFocus(false);
+    // Hear about clicks on every child so we can hand keyboard focus back to the host.
+    addMouseListener(this, true);
     setResizable(true, true);
     setResizeLimits(540, 320, 1440, 850);
     setSize(720, 420);
+}
+
+void SoundXAudioProcessorEditor::mouseUp(const juce::MouseEvent& e) {
+    // Keep FL Studio's typing keyboard alive: clicking our UI moves OS keyboard
+    // focus onto the plugin window, so hand it straight back to the host's
+    // wrapper window. Skip text fields so typing values into knobs still works.
+    if (dynamic_cast<juce::TextEditor*>(e.eventComponent) != nullptr
+        || dynamic_cast<juce::Label*>(e.eventComponent) != nullptr)
+        return;
+#if JUCE_WINDOWS
+    if (auto* peer = getPeer())
+        if (HWND parent = ::GetParent(static_cast<HWND>(peer->getNativeHandle())))
+            ::SetFocus(parent);
+#endif
 }
 
 void SoundXAudioProcessorEditor::paint(juce::Graphics& g) {
